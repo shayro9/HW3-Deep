@@ -89,7 +89,7 @@ which can lead to over fitting of the trained data.
 # ==============
 # Part 2 answers
 
-PART2_CUSTOM_DATA_URL = None
+PART2_CUSTOM_DATA_URL = "https://github.com/shayro9/HW3-Deep/raw/refs/heads/main/pokemon_data.zip"
 
 
 def part2_vae_hyperparams():
