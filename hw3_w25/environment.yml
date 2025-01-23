@@ -33,6 +33,3 @@ dependencies:
   - cudatoolkit
   - torchvision
   - torchtext
-
-platforms:
-  - linux-64

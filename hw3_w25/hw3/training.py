@@ -93,9 +93,24 @@ class Trainer(abc.ABC):
             #  - Implement early stopping. This is a very useful and
             #    simple regularization technique that is highly recommended.
             # ====== YOUR CODE: ======
-            
-            raise NotImplementedError()
+            train_result = self.train_epoch(dl_train, verbose=verbose, **kw)
+            train_loss += [float(max(train_result.losses) / len(train_result.losses))]
+            train_acc += [train_result.accuracy]
 
+            test_result = self.test_epoch(dl_test, verbose=verbose, **kw)
+            test_loss += [float(max(test_result.losses) / len(test_result.losses))]
+            test_acc += [test_result.accuracy]
+
+            if best_acc is None or test_result.accuracy > best_acc:
+                best_acc = test_result.accuracy
+                epochs_without_improvement = 0
+
+                if checkpoints:
+                    save_checkpoint = True
+            else:
+                epochs_without_improvement += 1
+                if early_stopping and epochs_without_improvement > early_stopping:
+                    break
             # ========================
 
             # Save model checkpoint if requested
@@ -223,9 +238,7 @@ class RNNTrainer(Trainer):
     def train_epoch(self, dl_train: DataLoader, **kw):
         # TODO: Implement modifications to the base method, if needed.
         # ====== YOUR CODE: ======
-        
-        self.hidden_state = None    
-            
+        self.hidden_state = None
         # ========================
         return super().train_epoch(dl_train, **kw)
 
@@ -250,7 +263,19 @@ class RNNTrainer(Trainer):
         #  - Update params
         #  - Calculate number of correct char predictions
         # ====== YOUR CODE: ======
-        raise NotImplementedError()
+        self.optimizer.zero_grad()
+        outputs, hidden = self.model(x, self.hidden_state)
+        outputs = outputs.transpose(1, 2)
+
+        loss = self.loss_fn(outputs, y)
+
+        loss.backward()
+        self.hidden_state = hidden.detach().clone()
+
+        self.optimizer.step()
+
+        y_pred = outputs.argmax(dim=1)
+        num_correct = (y == y_pred).sum()
         # ========================
 
         # Note: scaling num_correct by seq_len because each sample has seq_len
@@ -270,7 +295,14 @@ class RNNTrainer(Trainer):
             #  - Loss calculation
             #  - Calculate number of correct predictions
             # ====== YOUR CODE: ======
-            raise NotImplementedError()
+            outputs, hidden = self.model(x, self.hidden_state)
+            outputs = outputs.transpose(1, 2)
+
+            loss = self.loss_fn(outputs, y)
+            self.hidden_state = hidden.detach().clone()
+
+            y_pred = outputs.argmax(dim=1)
+            num_correct = (y == y_pred).sum()
             # ========================
 
         return BatchResult(loss.item(), num_correct.item() / seq_len)
