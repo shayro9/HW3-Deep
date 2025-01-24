@@ -95,7 +95,9 @@ class VAE(nn.Module):
 
         # TODO: Add more layers as needed for encode() and decode().
         # ====== YOUR CODE: ======
-        raise NotImplementedError()
+        self.mu_encoder = nn.Linear(n_features, z_dim, bias=True)
+        self.log_sig_encoder = nn.Linear(n_features, z_dim, bias=True)
+        self.z_reconstructor = nn.Linear(z_dim, n_features, bias=True)
         # ========================
 
     def _check_features(self, in_size):
@@ -116,7 +118,12 @@ class VAE(nn.Module):
         #     log_sigma2 (mean and log variance) of q(Z|x).
         #  2. Apply the reparametrization trick to obtain z.
         # ====== YOUR CODE: ======
-        raise NotImplementedError()
+        h = self.features_encoder(x).flatten(start_dim=1)
+        mu = self.mu_encoder(h)
+        log_sigma2 = self.log_sig_encoder(h)
+        std = torch.exp(0.5 * log_sigma2)
+        eps = torch.randn_like(std)
+        z = mu + eps * std
         # ========================
 
         return z, mu, log_sigma2
@@ -127,7 +134,9 @@ class VAE(nn.Module):
         #  1. Convert latent z to features h with a linear layer.
         #  2. Apply features decoder.
         # ====== YOUR CODE: ======
-        raise NotImplementedError()
+        h = self.z_reconstructor(z)
+        h = nn.Unflatten(1, self.features_shape)(h)
+        x_rec = self.features_decoder(h)
         # ========================
 
         # Scale to [-1, 1] (same dynamic range as original images).
@@ -146,7 +155,8 @@ class VAE(nn.Module):
             #    Instead of sampling from N(psi(z), sigma2 I), we'll just take
             #    the mean, i.e. psi(z).
             # ====== YOUR CODE: ======
-            raise NotImplementedError()
+            z = torch.randn(n, self.z_dim, device=device)
+            samples = self.decode(z)
             # ========================
 
         # Detach and move to CPU for display purposes
@@ -179,7 +189,21 @@ def vae_loss(x, xr, z_mu, z_log_sigma2, x_sigma2):
     #  1. The covariance matrix of the posterior is diagonal.
     #  2. You need to average over the batch dimension.
     # ====== YOUR CODE: ======
-    raise NotImplementedError()
+    z_dim = z_mu.shape[-1]
+    N, C, H, W = x.shape
+    x_dim = C * H * W
+
+    scaler = 1 / (x_dim * x_sigma2)
+    batch_data_loss = scaler * (x - xr).pow(2).sum(dim=(1, 2, 3))
+    data_loss = batch_data_loss.mean()
+
+    tr_sigma = torch.exp(z_log_sigma2).sum(dim=1)
+    mu_sq = z_mu.pow(2).sum(dim=1)
+    log_det_sigma = z_log_sigma2.sum(dim=1)
+    batch_kldiv_loss = tr_sigma + mu_sq - z_dim - log_det_sigma
+    kldiv_loss = batch_kldiv_loss.mean()
+
+    loss = data_loss + kldiv_loss
     # ========================
 
     return loss, data_loss, kldiv_loss
