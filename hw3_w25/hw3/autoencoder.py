@@ -19,18 +19,18 @@ class EncoderCNN(nn.Module):
         #  use pooling or only strides, use any activation functions,
         #  use BN or Dropout, etc.
         # ====== YOUR CODE: ======
-        modules = [nn.Conv2d(in_channels, 128, kernel_size=5, stride=2, padding=2),
+        modules = [nn.Conv2d(in_channels, 64, kernel_size=5, stride=2, padding=2),
+                   nn.BatchNorm2d(64),
+                   nn.ReLU(),
+                   nn.Conv2d(64, 128, kernel_size=5, stride=2, padding=2),
                    nn.BatchNorm2d(128),
                    nn.ReLU(),
                    nn.Conv2d(128, 256, kernel_size=5, stride=2, padding=2),
                    nn.BatchNorm2d(256),
                    nn.ReLU(),
-                   nn.Conv2d(256, 512, kernel_size=5, stride=2, padding=2),
-                   nn.BatchNorm2d(512),
-                   nn.ReLU(),
-                   nn.Conv2d(512, out_channels, kernel_size=5, stride=2, padding=2),
+                   nn.Conv2d(256, out_channels, kernel_size=5, stride=2, padding=2),
                    nn.BatchNorm2d(out_channels),
-                   nn.ReLU()
+                   nn.ReLU(),
                    ]
         # ========================
         self.cnn = nn.Sequential(*modules)
@@ -55,18 +55,18 @@ class DecoderCNN(nn.Module):
         #  inputs to the Encoder were.
         # ====== YOUR CODE: ======
         modules = [
-            nn.ConvTranspose2d(in_channels, 512, kernel_size=5, stride=2, padding=2, output_padding=1),
-            nn.BatchNorm2d(512),
+            nn.BatchNorm2d(in_channels),
             nn.ReLU(),
-            nn.ConvTranspose2d(512, 256, kernel_size=5, stride=2, padding=2, output_padding=1),
+            nn.ConvTranspose2d(in_channels, 256, kernel_size=5, stride=2, padding=2, output_padding=1),
             nn.BatchNorm2d(256),
             nn.ReLU(),
             nn.ConvTranspose2d(256, 128, kernel_size=5, stride=2, padding=2, output_padding=1),
             nn.BatchNorm2d(128),
             nn.ReLU(),
-            nn.ConvTranspose2d(128, out_channels, kernel_size=5, stride=2, padding=2, output_padding=1),
-            nn.BatchNorm2d(out_channels),
-            nn.ReLU()
+            nn.ConvTranspose2d(128, 64, kernel_size=5, stride=2, padding=2, output_padding=1),
+            nn.BatchNorm2d(64),
+            nn.ReLU(),
+            nn.ConvTranspose2d(64, out_channels, kernel_size=5, stride=2, padding=2, output_padding=1),
         ]
         # ========================
         self.cnn = nn.Sequential(*modules)
@@ -95,9 +95,9 @@ class VAE(nn.Module):
 
         # TODO: Add more layers as needed for encode() and decode().
         # ====== YOUR CODE: ======
-        self.mu_encoder = nn.Linear(n_features, z_dim, bias=True)
-        self.log_sig_encoder = nn.Linear(n_features, z_dim, bias=True)
-        self.z_reconstructor = nn.Linear(z_dim, n_features, bias=True)
+        self.add_module("mu_encoder", nn.Linear(n_features, self.z_dim))
+        self.add_module("log_sig_encoder", nn.Linear(n_features, self.z_dim))
+        self.add_module("z_reconstructor", nn.Linear(self.z_dim, n_features))
         # ========================
 
     def _check_features(self, in_size):
@@ -121,9 +121,9 @@ class VAE(nn.Module):
         h = self.features_encoder(x).flatten(start_dim=1)
         mu = self.mu_encoder(h)
         log_sigma2 = self.log_sig_encoder(h)
-        std = torch.exp(0.5 * log_sigma2)
-        eps = torch.randn_like(std)
-        z = mu + eps * std
+        std = torch.exp(log_sigma2)
+        eps = torch.normal(torch.zeros_like(mu), torch.ones_like(mu))
+        z = mu + std * eps
         # ========================
 
         return z, mu, log_sigma2
@@ -135,7 +135,7 @@ class VAE(nn.Module):
         #  2. Apply features decoder.
         # ====== YOUR CODE: ======
         h = self.z_reconstructor(z)
-        h = nn.Unflatten(1, self.features_shape)(h)
+        h = h.reshape(h.size(0), *self.features_shape)
         x_rec = self.features_decoder(h)
         # ========================
 
@@ -155,7 +155,7 @@ class VAE(nn.Module):
             #    Instead of sampling from N(psi(z), sigma2 I), we'll just take
             #    the mean, i.e. psi(z).
             # ====== YOUR CODE: ======
-            z = torch.randn(n, self.z_dim, device=device)
+            z = torch.randn((n, self.z_dim), device=device)
             samples = self.decode(z)
             # ========================
 
@@ -193,9 +193,8 @@ def vae_loss(x, xr, z_mu, z_log_sigma2, x_sigma2):
     N, C, H, W = x.shape
     x_dim = C * H * W
 
-    scaler = 1 / (x_dim * x_sigma2)
-    batch_data_loss = scaler * (x - xr).pow(2).sum(dim=(1, 2, 3))
-    data_loss = batch_data_loss.mean()
+    scaler = 1 / x_sigma2
+    data_loss = scaler * nn.MSELoss()(x, xr)
 
     tr_sigma = torch.exp(z_log_sigma2).sum(dim=1)
     mu_sq = z_mu.pow(2).sum(dim=1)

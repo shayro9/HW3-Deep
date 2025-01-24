@@ -89,7 +89,7 @@ which can lead to over fitting of the trained data.
 # ==============
 # Part 2 answers
 
-PART2_CUSTOM_DATA_URL = "https://github.com/shayro9/HW3-Deep/raw/refs/heads/main/pokemon_data.zip"
+PART2_CUSTOM_DATA_URL = "https://github.com/AviaAvraham1/TempDatasets/raw/refs/heads/main/George_W_Bush2.zip"
 
 
 def part2_vae_hyperparams():
@@ -98,11 +98,11 @@ def part2_vae_hyperparams():
     )
     # TODO: Tweak the hyperparameters to generate a former president.
     # ====== YOUR CODE: ======
-    hypers["batch_size"] = 128
+    hypers["batch_size"] = 8
     hypers["h_dim"] = 512
-    hypers["z_dim"] = 230
-    hypers["x_sigma2"] = 0.1
-    hypers["learn_rate"] = 0.001
+    hypers["z_dim"] = 256
+    hypers["x_sigma2"] = 0.001
+    hypers["learn_rate"] = 0.0001
     hypers["betas"] = (0.9, 0.999)  # (a,b)
     # ========================
     return hypers
