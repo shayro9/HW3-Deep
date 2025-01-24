@@ -315,7 +315,7 @@ class VAETrainer(Trainer):
         # TODO: Train a VAE on one batch.
         # ====== YOUR CODE: ======
         self.model.to(self.device)
-        x_recon, mu, logvar, z = self.model(x)
+        x_recon, mu, logvar = self.model(x)
 
         loss, data_loss, _ = self.loss_fn(x, x_recon, mu, logvar)
 
@@ -334,7 +334,7 @@ class VAETrainer(Trainer):
             # TODO: Evaluate a VAE on one batch.
             # ====== YOUR CODE: ======
             self.model.to(self.device)
-            x_recon, mu, logvar, z = self.model(x)
+            x_recon, mu, logvar = self.model(x)
 
             loss, data_loss, _ = self.loss_fn(x, x_recon, mu, logvar)
             # ========================
