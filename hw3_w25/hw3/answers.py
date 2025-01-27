@@ -98,11 +98,11 @@ def part2_vae_hyperparams():
     )
     # TODO: Tweak the hyperparameters to generate a former president.
     # ====== YOUR CODE: ======
-    hypers["batch_size"] = 64
+    hypers["batch_size"] = 32
     hypers["h_dim"] = 512
-    hypers["z_dim"] = 200
-    hypers["x_sigma2"] = 0.001
-    hypers["learn_rate"] = 0.0001
+    hypers["z_dim"] = 128
+    hypers["x_sigma2"] = 0.0005
+    hypers["learn_rate"] = 0.0002
     hypers["betas"] = (0.9, 0.999)  # (a,b)
     # ========================
     return hypers
@@ -110,26 +110,38 @@ def part2_vae_hyperparams():
 
 part2_q1 = r"""
 **Your answer:**
-
-
+In our code, the importance of the hyperparameter `x_sigma2` is to scale the reconstruction loss,
+This causes that smaller $\sigma$ values increases the weight of the reconstruction error, making the model to try to
+imitate the input data better. 
+While larger $\sigma$ values increase the weight of the KL divergence, making the model to try to focus on regularizing 
+the latent space and thus making smoother latent space helping the model to generalize better
 """
 
 part2_q2 = r"""
 **Your answer:**
+The VAE loss function is balancing 2 different components, the **reconstruction loss** and the **KL divergence**.
 
-
+1. **reconstruction loss** - this term is responsible for calculating the difference between the input and the output images
+   **KL divergence** -  this term express the difference between the posterior and prior distributions. Making the model
+   follow the prior distribution.
+2. The KL loss term ensures that the latent space follows the prior distribution which is a normal distribution.
+3. This results in a smooth, structured. Helping the model generate new realistic samples
+    Without the KL term, the latent space could become irregular and overfit to the training data.
 """
 
 part2_q3 = r"""
 **Your answer:**
-
-
-
+We start by maximizing the evidence distribution is essential to ensure that the output samples closely resemble the dataset.
+This is because when we maximize it, we increase the likelihood that the decoded outputs match the dataset with high probability. 
 """
 
 part2_q4 = r"""
 **Your answer:**
-
+Firstly directly optimizing σ² can lead to numerical issues like vanishing/exploding gradients, but working with log 
+compresses large ranges of variance into smaller scales, stabilizing gradient calculations during backpropagation.
+Moreover, the Variance must always be positive. So by modeling log(σ²), the network can output any real number
+that we can safely recover (σ² = exp(log(σ²))).
+This avoids unstable constraints like forcing the network to output strictly positive values, 
 """
 
 
@@ -140,7 +152,13 @@ def part3_gan_hyperparams():
     )
     # TODO: Tweak the hyperparameters to generate a former president.
     # ====== YOUR CODE: ======
-
+    hypers['batch_size'] = 32
+    hypers['z_dim'] = 4
+    hypers['data_label'] = 1
+    hypers['label_noise'] = 0.3
+    var = {'type': 'Adam', 'lr': 0.0002, 'betas': (0.5, 0.999)}
+    hypers['discriminator_optimizer'] = var
+    hypers['generator_optimizer'] = var
     # ========================
     return hypers
 
@@ -164,7 +182,7 @@ part3_q3 = r"""
 
 """
 
-PART3_CUSTOM_DATA_URL = None
+PART3_CUSTOM_DATA_URL = "https://github.com/shayro9/HW3-Deep/raw/refs/heads/main/pokemon_data.zip"
 
 
 def part4_transformer_encoder_hyperparams():
