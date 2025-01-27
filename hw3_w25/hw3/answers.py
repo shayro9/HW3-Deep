@@ -99,7 +99,7 @@ def part2_vae_hyperparams():
     # TODO: Tweak the hyperparameters to generate a former president.
     # ====== YOUR CODE: ======
     hypers["batch_size"] = 32
-    hypers["h_dim"] = 512
+    hypers["h_dim"] = 1024
     hypers["z_dim"] = 128
     hypers["x_sigma2"] = 0.0005
     hypers["learn_rate"] = 0.0002
@@ -177,9 +177,13 @@ part3_q2 = r"""
 
 part3_q3 = r"""
 **Your answer:**
-
-
-
+By comparing the results from the best models of VAE and GAN we got, we can see that the VAE images are blurrier and 
+smoother. This roots from the different objective of each model. VAE is a probabilistic model which aims to learn a 
+compressed representation of the data while minimizing the reconstruction error of each image, so it can later construct
+new images as well as possible. But minimizing the reconstruction loss leads to the result images to be an "average" of
+the input images thus making it look blurrier. GAN, on the other hand, is a adversarial model that focus on generating 
+data good enough to fool the discriminator to think its a real image. Therefore, the results images looks more sharp as
+its training process pushes the generator to produce more realistic images.    
 """
 
 PART3_CUSTOM_DATA_URL = "https://github.com/shayro9/HW3-Deep/raw/refs/heads/main/pokemon_data.zip"

@@ -18,28 +18,69 @@ def sliding_window_attention(q, k, v, window_size, padding_mask=None):
     :return values - the output values. #[Batch, SeqLen, Dims] or [Batch, num_heads, SeqLen, Dims]
     :return attention - the attention weights. #[Batch, SeqLen, SeqLen] or [Batch, num_heads, SeqLen, SeqLen]
     '''
-    assert window_size%2 == 0, "window size must be an even number"
+    assert window_size % 2 == 0, "window size must be an even number"
     seq_len = q.shape[-2]
     embed_dim = q.shape[-1]
     batch_size = q.shape[0] 
 
     values, attention = None, None
 
-    # TODO:
-    #  Compute the sliding window attention.
-    # NOTE: We will not test your implementation for efficiency, but you are required to follow these two rules:
-    # 1) Implement the function without using for loops.
-    # 2) DON'T compute all dot products and then remove the uneccessary comptutations
-    #    (You can compute the dot products for any entry, even if it corresponds to padding, as long as it is within the window).
-    # Aside from these two rules, you are free to implement the function as you wish. 
-    ## HINT: There are several ways to implement this function, and while you are free to implement it however you may wish,
-    ## some are more intuitive than others. We suggest you to consider the following:
-    ## Think how you can obtain the indices corresponding to the entries in the sliding windows using tensor operations (without loops),
-    ## and then use these indices to compute the dot products directly.
+    # TODO: Compute the sliding window attention.
+    #  NOTE: We will not test your implementation for efficiency, but you are required to follow these two rules:
+    #  1) Implement the function without using for loops.
+    #  2) DON'T compute all dot products and then remove the uneccessary comptutations
+    #  (You can compute the dot products for any entry, even if it corresponds to padding, as long as it is within the window).
+    #  Aside from these two rules, you are free to implement the function as you wish.
+    #  HINT: There are several ways to implement this function, and while you are free to implement it however you may wish,
+    #  some are more intuitive than others. We suggest you to consider the following:
+    #  Think how you can obtain the indices corresponding to the entries in the sliding windows using tensor operations
+    #  (without loops), and then use these indices to compute the dot products directly.
+    #
     # ====== YOUR CODE: ======
-    raise NotImplementedError()
-    # ========================
+    original_shape = q.shape
+    device = q.device
 
+    if len(original_shape) == 3:
+        q = q.reshape(batch_size, 1, seq_len, embed_dim)
+        k = k.reshape(batch_size, 1, seq_len, embed_dim)
+        v = v.reshape(batch_size, 1, seq_len, embed_dim)
+        heads = 1
+    else:
+        heads = q.shape[1]
+
+    attention = torch.zeros((batch_size, heads, seq_len, seq_len))
+
+    rows = torch.arange(seq_len - 1).unsqueeze(1).unsqueeze(2).expand(seq_len - 1, 2, 2)
+    cols = torch.arange(seq_len - 1).unsqueeze(1).unsqueeze(2).expand(seq_len - 1, 2, 2)
+
+    row_offsets = torch.tensor([[0, 0], [1, 1]]).unsqueeze(0)
+    col_offsets = torch.tensor([[0, 1], [0, 1]]).unsqueeze(0)
+
+    row_indices = rows + row_offsets
+    col_indices = cols + col_offsets
+
+    row_indices = row_indices.reshape(-1)
+    col_indices = col_indices.reshape(-1)
+
+    dot_product = q[:, :, row_indices, :] * k[:, :, col_indices, :]
+    attention[:, :, row_indices, col_indices] = torch.sum(dot_product, -1)
+
+    if padding_mask is not None:
+        cols_padding = padding_mask.unsqueeze(1).unsqueeze(-1).int()
+        rows_padding = padding_mask.unsqueeze(1).unsqueeze(-2).int()
+        combined_padding = cols_padding & rows_padding
+        attention = attention.masked_fill_(combined_padding == 0, float('-inf'))
+        attention = attention.to(dtype=torch.float, device=device)
+
+    attention[attention == 0] = float('-inf')
+    attention = attention / (embed_dim ** 0.5)
+    attention = torch.softmax(attention, dim=-1)
+    values = attention @ v
+
+    if len(original_shape) == 3:
+        attention = attention.reshape(batch_size, seq_len, seq_len)
+        values = values.reshape(batch_size, seq_len, embed_dim)
+    # ========================
 
     return values, attention
 

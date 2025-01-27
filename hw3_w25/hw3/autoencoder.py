@@ -19,7 +19,7 @@ class EncoderCNN(nn.Module):
         #  use pooling or only strides, use any activation functions,
         #  use BN or Dropout, etc.
         # ====== YOUR CODE: ======
-        sizes = [in_channels, 128, 256, 512, 1024]
+        sizes = [in_channels, 128, 256, 512, out_channels]
         modules = []
         relu_slope = 0.2
         for i, (in_channels, out_channels) in enumerate(zip(sizes, sizes[1:])):
@@ -49,12 +49,12 @@ class DecoderCNN(nn.Module):
         #  inputs to the Encoder were.
         # ====== YOUR CODE: ======
         sizes = [in_channels, 512, 256, 128, out_channels]
-        layer_params = []
+        modules = []
 
         for i, (in_ch, out_ch) in enumerate(zip(sizes, sizes[1:])):
-            layer_params.append(nn.BatchNorm2d(in_ch))
-            layer_params.append(nn.ReLU())
-            layer_params.append(nn.ConvTranspose2d(in_ch, out_ch, kernel_size=5, stride=2, padding=2, output_padding=1))
+            modules.append(nn.BatchNorm2d(in_ch))
+            modules.append(nn.ReLU())
+            modules.append(nn.ConvTranspose2d(in_ch, out_ch, kernel_size=5, stride=2, padding=2, output_padding=1))
         # ========================
         self.cnn = nn.Sequential(*modules)
 
