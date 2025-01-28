@@ -1,8 +1,6 @@
 import torch
 import torch.nn as nn
 import math
-import numpy as np
-
 
 def get_attention_indices(seq_len, w):
     rows_idx, column_indices = torch.meshgrid(torch.arange(seq_len), torch.arange(seq_len), indexing='ij')
@@ -17,7 +15,7 @@ def get_attention_indices(seq_len, w):
     rows_idx = rows_idx[valid_mask]
     cols_idx = column_indices[valid_mask]
 
-    return rows_idx, cols_idx
+    return rows_idx,cols_idx
 
 def sliding_window_attention(q, k, v, window_size, padding_mask=None):
     '''
@@ -34,7 +32,7 @@ def sliding_window_attention(q, k, v, window_size, padding_mask=None):
     assert window_size%2 == 0, "window size must be an even number"
     seq_len = q.shape[-2]
     embed_dim = q.shape[-1]
-    batch_size = q.shape[0]
+    batch_size = q.shape[0] 
 
     values, attention = None, None
 
@@ -44,7 +42,7 @@ def sliding_window_attention(q, k, v, window_size, padding_mask=None):
     # 1) Implement the function without using for loops.
     # 2) DON'T compute all dot products and then remove the uneccessary comptutations
     #    (You can compute the dot products for any entry, even if it corresponds to padding, as long as it is within the window).
-    # Aside from these two rules, you are free to implement the function as you wish.
+    # Aside from these two rules, you are free to implement the function as you wish. 
     ## HINT: There are several ways to implement this function, and while you are free to implement it however you may wish,
     ## some are more intuitive than others. We suggest you to consider the following:
     ## Think how you can obtain the indices corresponding to the entries in the sliding windows using tensor operations (without loops),
@@ -87,7 +85,7 @@ def sliding_window_attention(q, k, v, window_size, padding_mask=None):
 
     if one_head:
         attention = attention.reshape(batch_size, seq_len, seq_len)
-        values = values.reshape(batch_size, seq_len, embed_dim)
+        values = values.reshape(batch_size, seq_len,embed_dim)
     # ========================
 
 
@@ -197,21 +195,12 @@ class EncoderLayer(nn.Module):
         :param dropout: the dropout probability
         '''
         super(EncoderLayer, self).__init__()
-        # self.attention_dropout = nn.Sequential(
-        #     # input is Z, going into a convolution
-        #     MultiHeadAttention(embed_dim, embed_dim, num_heads, window_size),
-        #     nn.Dropout(dropout)
-        # )
-        self.multi_attention = MultiHeadAttention(embed_dim, embed_dim, num_heads, window_size)
-        self.drop = nn.Dropout(dropout)
+        self.self_attn = MultiHeadAttention(embed_dim, embed_dim, num_heads, window_size)
         self.feed_forward = PositionWiseFeedForward(embed_dim, hidden_dim)
-
-        # self.feed_forward_and_dropout = nn.Sequential(
-        #     PositionWiseFeedForward(embed_dim, hidden_dim),
-        #     nn.Dropout(dropout)
-        # )
-
-        self.norm = nn.LayerNorm(embed_dim)
+        self.norm1 = nn.LayerNorm(embed_dim)
+        self.norm2 = nn.LayerNorm(embed_dim)
+        self.dropout = nn.Dropout(dropout)
+        
     def forward(self, x, padding_mask):
         '''
         :param x: the input to the layer of shape [Batch, SeqLen, Dims]
@@ -225,26 +214,20 @@ class EncoderLayer(nn.Module):
         #   3) Apply a feed-forward layer to the output of step 2, and then apply dropout again.
         #   4) Add a second residual connection and normalize again.
         # ====== YOUR CODE: ======
+        step1 = self.self_attn(x, padding_mask)
+        step1 = self.dropout(step1)
 
-        # Steps according to documentation:
-        # attention and dropout
-        step1 = self.multi_attention(x, padding_mask)
-        step1 = self.drop(step1)
+        step2 = self.norm1(x + step1)
 
-        # normalization
-        step2 = self.norm(x + step1)
-
-        # feed forward and dropout
         step3 = self.feed_forward(step2)
-        step3 = self.drop(step3)
+        step3 = self.dropout(step3)
 
-        # normalization with residual of step2 output
-        step4 = self.norm(step2 + step3)
-        x = step4
+        step4 = self.norm2(step2 + step3)
+        x=step4
         # ========================
-
+        
         return x
-
+    
     
     
 class Encoder(nn.Module):
@@ -275,8 +258,8 @@ class Encoder(nn.Module):
 
     def forward(self, sentence, padding_mask):
         '''
-        :param sentence #[Batch, max_seq_len]
-        :param padding_mask #[Batch, max_seq_len]
+        :param sententence #[Batch, max_seq_len]
+        :param padding mask #[Batch, max_seq_len]
         :return: the logits  [Batch]
         '''
         output = None
@@ -291,15 +274,14 @@ class Encoder(nn.Module):
         #     (always the first token) to receive the logits.
         # ====== YOUR CODE: ======
         input_embedding = self.encoder_embedding(sentence)
-
         positional_encoding = self.positional_encoding(input_embedding)
-
         transformer_output = self.dropout(positional_encoding)
 
         for encoder_layer in self.encoder_layers:
             transformer_output = encoder_layer(transformer_output, padding_mask)
 
-        output = self.classification_mlp(transformer_output[:, 0])  # corresponding to [CLS] token
+        output = self.classification_mlp(transformer_output[:, 0])  
+        
         # ========================
         
         

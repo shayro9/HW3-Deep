@@ -21,7 +21,7 @@ def sliding_window_attention(q, k, v, window_size, padding_mask=None):
     assert window_size % 2 == 0, "window size must be an even number"
     seq_len = q.shape[-2]
     embed_dim = q.shape[-1]
-    batch_size = q.shape[0] 
+    batch_size = q.shape[0]
 
     values, attention = None, None
 
@@ -40,46 +40,52 @@ def sliding_window_attention(q, k, v, window_size, padding_mask=None):
     original_shape = q.shape
     device = q.device
 
+    # 4D if 3D
     if len(original_shape) == 3:
-        q = q.reshape(batch_size, 1, seq_len, embed_dim)
-        k = k.reshape(batch_size, 1, seq_len, embed_dim)
-        v = v.reshape(batch_size, 1, seq_len, embed_dim)
+        q = q.unsqueeze(1)
+        k = k.unsqueeze(1)
         heads = 1
     else:
         heads = q.shape[1]
 
-    attention = torch.zeros((batch_size, heads, seq_len, seq_len))
+    window_half = window_size // 2
 
-    rows = torch.arange(seq_len - 1).unsqueeze(1).unsqueeze(2).expand(seq_len - 1, 2, 2)
-    cols = torch.arange(seq_len - 1).unsqueeze(1).unsqueeze(2).expand(seq_len - 1, 2, 2)
+    # All (i, j) in the window
+    i = torch.arange(seq_len, device=device).view(-1, 1)
+    offsets = torch.arange(-window_half, window_half + 1, device=device)
+    j = i + offsets
 
-    row_offsets = torch.tensor([[0, 0], [1, 1]]).unsqueeze(0)
-    col_offsets = torch.tensor([[0, 1], [0, 1]]).unsqueeze(0)
+    row_indices = i.repeat(1, offsets.size(0)).flatten()
+    col_indices = j.flatten()
 
-    row_indices = rows + row_offsets
-    col_indices = cols + col_offsets
+    valid_mask = (col_indices >= 0) & (col_indices < seq_len)
+    row_indices = row_indices[valid_mask]
+    col_indices = col_indices[valid_mask]
 
-    row_indices = row_indices.reshape(-1)
-    col_indices = col_indices.reshape(-1)
+    # Dot products
+    q_selected = q[:, :, row_indices, :]
+    k_selected = k[:, :, col_indices, :]
+    dot_products = (q_selected * k_selected).sum(dim=-1)
 
-    dot_product = q[:, :, row_indices, :] * k[:, :, col_indices, :]
-    attention[:, :, row_indices, col_indices] = torch.sum(dot_product, -1)
+    raw_attention = torch.full((batch_size, heads, seq_len, seq_len), float('-inf'), device=device)
+    raw_attention[:, :, row_indices, col_indices] = dot_products
 
     if padding_mask is not None:
-        cols_padding = padding_mask.unsqueeze(1).unsqueeze(-1).int()
-        rows_padding = padding_mask.unsqueeze(1).unsqueeze(-2).int()
-        combined_padding = cols_padding & rows_padding
-        attention = attention.masked_fill_(combined_padding == 0, float('-inf'))
-        attention = attention.to(dtype=torch.float, device=device)
+        cols_mask = padding_mask.unsqueeze(1).unsqueeze(2).bool()  # [batch, 1, seq_len, 1]
+        rows_mask = padding_mask.unsqueeze(1).unsqueeze(3).bool()  # [batch, 1, 1, seq_len]
+        combined_mask = cols_mask & rows_mask  # [batch, 1, seq_len, seq_len]
+        raw_attention = raw_attention.masked_fill(~combined_mask, float('-inf'))
 
-    attention[attention == 0] = float('-inf')
-    attention = attention / (embed_dim ** 0.5)
+    attention = raw_attention / (embed_dim ** 0.5)
     attention = torch.softmax(attention, dim=-1)
+    attention = torch.nan_to_num(attention, 0.0)
+
+
     values = attention @ v
 
     if len(original_shape) == 3:
-        attention = attention.reshape(batch_size, seq_len, seq_len)
-        values = values.reshape(batch_size, seq_len, embed_dim)
+        attention = attention.squeeze(1)
+        values = values.squeeze(1)
     # ========================
 
     return values, attention
@@ -87,21 +93,21 @@ def sliding_window_attention(q, k, v, window_size, padding_mask=None):
 
 
 class MultiHeadAttention(nn.Module):
-    
+
     def __init__(self, input_dim, embed_dim, num_heads, window_size):
         super().__init__()
         assert embed_dim % num_heads == 0, "Embedding dimension must be 0 modulo number of heads."
-        
+
         self.embed_dim = embed_dim
         self.num_heads = num_heads
         self.head_dim = embed_dim // num_heads
         self.window_size = window_size
-        
+
         # Stack all weight matrices 1...h together for efficiency
         # "bias=False" is optional, but for the projection we learned, there is no teoretical justification to use bias
         self.qkv_proj = nn.Linear(input_dim, 3*embed_dim)
         self.o_proj = nn.Linear(embed_dim, embed_dim)
-        
+
         self._reset_parameters()
 
     def _reset_parameters(self):
@@ -114,33 +120,33 @@ class MultiHeadAttention(nn.Module):
     def forward(self, x, padding_mask, return_attention=False):
         batch_size, seq_length, embed_dim = x.size()
         qkv = self.qkv_proj(x)
-        
+
         # Separate Q, K, V from linear output
         qkv = qkv.reshape(batch_size, seq_length, self.num_heads, 3*self.head_dim)
         qkv = qkv.permute(0, 2, 1, 3) # [Batch, Head, SeqLen, 3*Dims]
-        
+
         q, k, v = qkv.chunk(3, dim=-1) #[Batch, Head, SeqLen, Dims]
-        
+
         # Determine value outputs
         # TODO:
         # call the sliding window attention function you implemented
         # ====== YOUR CODE: ======
-        raise NotImplementedError()
+        values, attention = sliding_window_attention(q, k, v, window_size=self.window_size, padding_mask=padding_mask)
         # ========================
 
         values = values.permute(0, 2, 1, 3) # [Batch, SeqLen, Head, Dims]
         values = values.reshape(batch_size, seq_length, embed_dim) #concatination of all heads
         o = self.o_proj(values)
-        
+
         if return_attention:
             return o, attention
         else:
             return o
-        
-        
+
+
 class PositionalEncoding(nn.Module):
 
-    def __init__(self, d_model, max_len=5000): 
+    def __init__(self, d_model, max_len=5000):
         """
         Inputs
             d_model - Hidden dimensionality of the input.
@@ -155,7 +161,7 @@ class PositionalEncoding(nn.Module):
         pe[:, 0::2] = torch.sin(position * div_term)
         pe[:, 1::2] = torch.cos(position * div_term)
         pe = pe.unsqueeze(0)
-        
+
         # register_buffer => Tensor which is not a parameter, but should be part of the modules state.
         # Used for tensors that need to be on the same device as the module.
         # persistent=False tells PyTorch to not add the buffer to the state dict (e.g. when we save the model) 
@@ -164,8 +170,7 @@ class PositionalEncoding(nn.Module):
     def forward(self, x):
         x = x + self.pe[:, :x.size(1)]
         return x
-    
-    
+
 
 class PositionWiseFeedForward(nn.Module):
     def __init__(self, input_dim, hidden_dim):
@@ -177,7 +182,7 @@ class PositionWiseFeedForward(nn.Module):
     def forward(self, x):
         return self.fc2(self.activation(self.fc1(x)))
 
-    
+
 class EncoderLayer(nn.Module):
     def __init__(self, embed_dim, hidden_dim, num_heads, window_size, dropout=0.1):
         '''
@@ -193,7 +198,7 @@ class EncoderLayer(nn.Module):
         self.norm1 = nn.LayerNorm(embed_dim)
         self.norm2 = nn.LayerNorm(embed_dim)
         self.dropout = nn.Dropout(dropout)
-        
+
     def forward(self, x, padding_mask):
         '''
         :param x: the input to the layer of shape [Batch, SeqLen, Dims]
@@ -207,13 +212,20 @@ class EncoderLayer(nn.Module):
         #   3) Apply a feed-forward layer to the output of step 2, and then apply dropout again.
         #   4) Add a second residual connection and normalize again.
         # ====== YOUR CODE: ======
-        raise NotImplementedError()
+        attn_output = self.self_attn(x, padding_mask)
+        x = x + self.dropout(attn_output)
+        x = self.norm1(x)
+
+        # Feed-forward with residual
+        ff_output = self.feed_forward(x)
+        x = x + self.dropout(ff_output)
+        x = self.norm2(x)
         # ========================
-        
+
         return x
-    
-    
-    
+
+
+
 class Encoder(nn.Module):
     def __init__(self, vocab_size, embed_dim, num_heads, num_layers, hidden_dim, max_seq_length, window_size, dropout=0.1):
         '''
@@ -257,13 +269,18 @@ class Encoder(nn.Module):
         #  5) Apply the classification MLP to the output vector corresponding to the special token [CLS] 
         #     (always the first token) to receive the logits.
         # ====== YOUR CODE: ======
-        raise NotImplementedError()
-        
+        embeddings = self.encoder_embedding(sentence)
+        positional = self.positional_encoding(embeddings)
+        dropped = self.dropout(positional)
+        layer_input = dropped
+        for encoder_layer in self.encoder_layers:
+            layer_input = encoder_layer(layer_input, padding_mask)
+
+        output = self.classification_mlp(layer_input[:, 0])
         # ========================
-        
-        
-        return output  
-    
+
+        return output
+
     def predict(self, sentence, padding_mask):
         '''
         :param sententence #[Batch, max_seq_len]
@@ -274,4 +291,3 @@ class Encoder(nn.Module):
         preds = torch.round(torch.sigmoid(logits))
         return preds
 
-    
